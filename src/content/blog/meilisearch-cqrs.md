@@ -1,0 +1,435 @@
+---
+title: 'Guia Prático de CQRS + Meilisearch: Chega de travar o MySQL com buscas textuais'
+description: 'O Fim do LIKE: Como Escalar a Busca de Aplicações com CQRS e Meilisearch'
+pubDate: 'May 21 2026'
+heroImage: '../../assets/meilisearch-cqrs.png'
+---
+
+# Por Que `LIKE '%termo%'` é uma Armadilha de Performance (e Como o CQRS Resolve Isso)
+
+No desenvolvimento de software, é extremamente comum iniciarmos sistemas utilizando bancos de dados relacionais tradicionais, como **MySQL** ou **PostgreSQL**, para gerenciar todas as operações da aplicação.
+
+Quando surge a necessidade de criar uma barra de pesquisa, a reação instintiva da maioria dos desenvolvedores é recorrer à cláusula SQL:
+
+```sql
+SELECT * FROM products
+WHERE name LIKE '%termo%';
+```
+
+No ambiente de desenvolvimento — ou com poucos milhares de registros — essa abordagem funciona de forma aceitável.
+
+No entanto, à medida que o volume de dados cresce para **centenas de milhares de linhas** e o tráfego de usuários simultâneos aumenta, essa simples linha de código se transforma em uma das maiores armadilhas de performance de uma infraestrutura.
+
+---
+
+# A Anatomia do Problema: Por Que o Banco Relacional “Chora”?
+
+Para entender o gargalo, precisamos olhar para como os bancos relacionais organizam seus índices.
+
+Motores como o **InnoDB (MySQL)** utilizam uma estrutura chamada **Árvore B+ (B+ Tree)** para indexação.
+
+Essa estrutura é otimizada para:
+
+- **Buscas exatas**
+
+```sql
+WHERE id = 42
+```
+
+- **Ordenações**
+
+```sql
+ORDER BY created_at
+```
+
+- **Consultas por intervalo**
+
+```sql
+WHERE price BETWEEN 100 AND 500
+```
+
+---
+
+## O Problema com `%termo%`
+
+Quando realizamos uma busca com caractere coringa no início:
+
+```sql
+WHERE name LIKE '%matrix%'
+```
+
+quebramos completamente a lógica de navegação da Árvore B+.
+
+O banco não consegue prever quais caracteres iniciam o texto, então ele se torna incapaz de navegar pelo índice.
+
+A única alternativa restante é realizar um:
+
+## **Full Table Scan**
+
+Ou seja, o banco precisa:
+
+1. Ler cada registro do disco
+2. Carregar para memória
+3. Verificar manualmente se contém o termo pesquisado
+
+---
+
+# Complexidade Algorítmica
+
+Com índices normais:
+
+$$
+O(\log N)
+$$
+
+ou até próximo de constante.
+
+Com `%termo%`:
+
+$$
+O(N)
+$$
+
+Isso significa que o custo cresce linearmente com a quantidade de registros.
+
+Se tivermos:
+
+- **500 mil registros**
+- **50 usuários simultâneos**
+- buscas constantes
+
+o servidor sofrerá:
+
+- explosão de I/O de disco
+- saturação de CPU
+- lentidão generalizada
+- risco real de timeout e indisponibilidade
+
+---
+
+# Outro Problema: Busca Rígida
+
+Bancos relacionais exigem correspondência literal.
+
+Se o usuário digitar:
+
+```txt
+matrx
+```
+
+ao invés de:
+
+```txt
+matrix
+```
+
+o retorno será:
+
+```txt
+0 resultados
+```
+
+Isso gera frustração imediata.
+
+---
+
+# A Solução Arquitetural: CQRS
+
+**CQRS** significa:
+
+> **Command Query Responsibility Segregation**
+
+A ideia é separar:
+
+- **Command → escrita**
+- **Query → leitura**
+
+---
+
+## Arquitetura
+
+```text
+                  ┌──────────────┐
+                  │  Aplicação   │
+                  └──────┬───────┘
+                         │
+         ┌───────────────┴───────────────┐
+         ▼                               ▼
+     (Escrita)                        (Leitura)
+   ┌───────────┐                   ┌──────────────┐
+   │   MySQL   │                   │ Meilisearch  │
+   └───────────┘                   └──────────────┘
+```
+
+---
+
+# Lado de Escrita (Commands)
+
+O **MySQL** continua sendo o banco transacional principal.
+
+Responsável por:
+
+- integridade referencial
+- transações ACID
+- consistência forte
+- persistência oficial dos dados
+
+Exemplo:
+
+```sql
+INSERT INTO products (...)
+UPDATE orders SET status = 'paid'
+```
+
+---
+
+# Lado de Leitura (Queries)
+
+As buscas textuais pesadas são delegadas a motores especializados como:
+
+- **Meilisearch**
+- **Elasticsearch**
+- **Typesense**
+
+Esses motores mantêm uma cópia otimizada para pesquisa textual.
+
+Exemplo:
+
+```http
+GET /search?q=matrix
+```
+
+---
+
+# Benefício Imediato
+
+Ao remover buscas textuais do MySQL:
+
+✅ O banco relacional fica livre para transações críticas  
+✅ Menor contenção de recursos  
+✅ Escalabilidade horizontal  
+✅ Redução drástica de gargalos
+
+O sistema deixa de correr risco de cair porque muitos usuários estão usando a barra de busca ao mesmo tempo.
+
+---
+
+# Por Que o Meilisearch é Tão Rápido?
+
+O Meilisearch utiliza **Índice Invertido**.
+
+Funciona como o índice remissivo de um livro:
+
+Ao invés de ler o livro inteiro procurando uma palavra, você consulta o índice e descobre exatamente onde ela está.
+
+---
+
+## Exemplo Conceitual
+
+Ao indexar:
+
+```txt
+"Matrix Reloaded"
+"Matrix Revolutions"
+"John Wick"
+```
+
+O índice invertido vira algo próximo disso:
+
+```json
+{
+  "matrix": [1, 2],
+  "reloaded": [1],
+  "revolutions": [2],
+  "john": [3],
+  "wick": [3]
+}
+```
+
+Buscar `"matrix"` é praticamente instantâneo.
+
+---
+
+# Performance
+
+Enquanto uma busca SQL pesada pode levar:
+
+- **100ms**
+- **300ms**
+- **500ms**
+
+No Meilisearch normalmente temos:
+
+- **< 2ms**
+
+Mesmo com milhões de documentos.
+
+---
+
+# Recursos Nativos de UX
+
+## Tolerância a Erros
+
+Se o usuário digitar:
+
+```txt
+matrx
+```
+
+o sistema entende:
+
+```txt
+matrix
+```
+
+Isso é possível usando distância de edição  
+(baseada em **Levenshtein**).
+
+---
+
+## Search-as-you-type
+
+Resultados aparecem a cada tecla:
+
+```txt
+m
+ma
+mat
+matr
+matri
+matrix
+```
+
+Experiência instantânea.
+
+---
+
+## Ranking de Relevância
+
+Você pode priorizar campos.
+
+Exemplo:
+
+Dar mais peso para:
+
+- título
+
+do que para:
+
+- descrição
+
+Exemplo:
+
+```json
+{
+  "rankingRules": [
+    "title",
+    "description"
+  ]
+}
+```
+
+---
+
+# Consistência Eventual
+
+Ao adotar CQRS, aceitamos que os dados existem em dois lugares:
+
+- **MySQL**
+- **Meilisearch**
+
+Isso introduz:
+
+> **Consistência Eventual**
+
+Ou seja:
+
+Um produto pode ser salvo no MySQL e aparecer na busca alguns milissegundos depois.
+
+---
+
+# Estratégias de Sincronização
+
+## Sincronização Direta
+
+A API grava e indexa logo depois:
+
+```php
+$productRepository->save($product);
+
+$meili->index('products')->addDocuments([$product]);
+```
+
+Simples, porém acoplado.
+
+---
+
+## Mensageria
+
+Usando:
+
+- RabbitMQ
+- Kafka
+
+Fluxo:
+
+```text
+Produto criado
+   ↓
+Evento publicado
+   ↓
+Consumer indexa no Meilisearch
+```
+
+Mais resiliente.
+
+---
+
+## CDC (Change Data Capture)
+
+Ferramentas monitoram mudanças no banco em tempo real:
+
+- Debezium
+- Maxwell
+- Canal
+
+Sincronização automática e desacoplada.
+
+---
+
+# Resultado Final
+
+A arquitetura se torna:
+
+- **elástica**
+- **desacoplada**
+- **resiliente**
+- **escalável**
+
+Capaz de suportar **milhões de buscas** sem comprometer a saúde do banco transacional.
+
+---
+
+# Conclusão
+
+Se sua aplicação possui:
+
+- catálogo grande
+- busca textual intensa
+- muitos usuários simultâneos
+
+então usar:
+
+```sql
+LIKE '%termo%'
+```
+
+não é apenas uma má prática.
+
+É uma bomba-relógio arquitetural.
+
+A combinação:
+
+**MySQL + CQRS + Meilisearch**
+
+transforma a busca em uma operação especializada, rápida e preparada para escala real.
