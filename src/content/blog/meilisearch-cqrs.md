@@ -1,11 +1,9 @@
 ---
-title: 'Guia Prático de CQRS + Meilisearch: Chega de travar o MySQL com buscas textuais'
+title: 'CQRS + Meilisearch: Chega de travar o MySQL com buscas textuais'
 description: 'O Fim do LIKE: Como Escalar a Busca de Aplicações com CQRS e Meilisearch'
 pubDate: 'May 21 2026'
 heroImage: '../../assets/meilisearch-cqrs.png'
 ---
-
-# Por Que `LIKE '%termo%'` é uma Armadilha de Performance (e Como o CQRS Resolve Isso)
 
 No desenvolvimento de software, é extremamente comum iniciarmos sistemas utilizando bancos de dados relacionais tradicionais, como **MySQL** ou **PostgreSQL**, para gerenciar todas as operações da aplicação.
 
@@ -22,7 +20,7 @@ No entanto, à medida que o volume de dados cresce para **centenas de milhares d
 
 ---
 
-# A Anatomia do Problema: Por Que o Banco Relacional “Chora”?
+#### A Anatomia do Problema: Por Que o Banco Relacional “Chora”?
 
 Para entender o gargalo, precisamos olhar para como os bancos relacionais organizam seus índices.
 
@@ -50,7 +48,7 @@ WHERE price BETWEEN 100 AND 500
 
 ---
 
-## O Problema com `%termo%`
+##### O Problema com `%termo%`
 
 Quando realizamos uma busca com caractere coringa no início:
 
@@ -64,7 +62,7 @@ O banco não consegue prever quais caracteres iniciam o texto, então ele se tor
 
 A única alternativa restante é realizar um:
 
-## **Full Table Scan**
+##### **Full Table Scan**
 
 Ou seja, o banco precisa:
 
@@ -74,7 +72,7 @@ Ou seja, o banco precisa:
 
 ---
 
-# Complexidade Algorítmica
+#### Complexidade Algorítmica
 
 Com índices normais:
 
@@ -107,7 +105,7 @@ o servidor sofrerá:
 
 ---
 
-# Outro Problema: Busca Rígida
+#### Outro Problema: Busca Rígida
 
 Bancos relacionais exigem correspondência literal.
 
@@ -133,7 +131,7 @@ Isso gera frustração imediata.
 
 ---
 
-# A Solução Arquitetural: CQRS
+#### A Solução Arquitetural: CQRS
 
 **CQRS** significa:
 
@@ -146,7 +144,7 @@ A ideia é separar:
 
 ---
 
-## Arquitetura
+##### Arquitetura
 
 ```text
                   ┌──────────────┐
@@ -163,7 +161,7 @@ A ideia é separar:
 
 ---
 
-# Lado de Escrita (Commands)
+#### Lado de Escrita (Commands)
 
 O **MySQL** continua sendo o banco transacional principal.
 
@@ -183,7 +181,7 @@ UPDATE orders SET status = 'paid'
 
 ---
 
-# Lado de Leitura (Queries)
+#### Lado de Leitura (Queries)
 
 As buscas textuais pesadas são delegadas a motores especializados como:
 
@@ -201,7 +199,7 @@ GET /search?q=matrix
 
 ---
 
-# Benefício Imediato
+#### Benefício Imediato
 
 Ao remover buscas textuais do MySQL:
 
@@ -214,7 +212,7 @@ O sistema deixa de correr risco de cair porque muitos usuários estão usando a 
 
 ---
 
-# Por Que o Meilisearch é Tão Rápido?
+#### Por Que o Meilisearch é Tão Rápido?
 
 O Meilisearch utiliza **Índice Invertido**.
 
@@ -224,7 +222,7 @@ Ao invés de ler o livro inteiro procurando uma palavra, você consulta o índic
 
 ---
 
-## Exemplo Conceitual
+##### Exemplo Conceitual
 
 Ao indexar:
 
@@ -250,7 +248,7 @@ Buscar `"matrix"` é praticamente instantâneo.
 
 ---
 
-# Performance
+#### Performance
 
 Enquanto uma busca SQL pesada pode levar:
 
@@ -266,9 +264,9 @@ Mesmo com milhões de documentos.
 
 ---
 
-# Recursos Nativos de UX
+#### Recursos Nativos de UX
 
-## Tolerância a Erros
+##### Tolerância a Erros
 
 Se o usuário digitar:
 
@@ -287,7 +285,7 @@ Isso é possível usando distância de edição
 
 ---
 
-## Search-as-you-type
+##### Search-as-you-type
 
 Resultados aparecem a cada tecla:
 
@@ -304,7 +302,7 @@ Experiência instantânea.
 
 ---
 
-## Ranking de Relevância
+##### Ranking de Relevância
 
 Você pode priorizar campos.
 
@@ -331,7 +329,7 @@ Exemplo:
 
 ---
 
-# Consistência Eventual
+#### Consistência Eventual
 
 Ao adotar CQRS, aceitamos que os dados existem em dois lugares:
 
@@ -348,9 +346,9 @@ Um produto pode ser salvo no MySQL e aparecer na busca alguns milissegundos depo
 
 ---
 
-# Estratégias de Sincronização
+#### Estratégias de Sincronização
 
-## Sincronização Direta
+##### Sincronização Direta
 
 A API grava e indexa logo depois:
 
@@ -364,7 +362,7 @@ Simples, porém acoplado.
 
 ---
 
-## Mensageria
+##### Mensageria
 
 Usando:
 
@@ -385,7 +383,7 @@ Mais resiliente.
 
 ---
 
-## CDC (Change Data Capture)
+##### CDC (Change Data Capture)
 
 Ferramentas monitoram mudanças no banco em tempo real:
 
@@ -397,7 +395,7 @@ Sincronização automática e desacoplada.
 
 ---
 
-# Resultado Final
+#### Resultado Final
 
 A arquitetura se torna:
 
@@ -410,7 +408,7 @@ Capaz de suportar **milhões de buscas** sem comprometer a saúde do banco trans
 
 ---
 
-# Conclusão
+#### Conclusão
 
 Se sua aplicação possui:
 
