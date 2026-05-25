@@ -1,5 +1,5 @@
 ---
-title: 'Aprenda na prática a realizar buscas textuais instantâneas e com tolerância a erros com CQRS e Meilisearch'
+title: 'CQRS + Meilisearch: Chega de travar o MySQL com buscas textuais'
 description: 'O Fim do LIKE: Como Escalar a Busca de Aplicações com CQRS e Meilisearch'
 pubDate: 'May 24 2026'
 heroImage: '../../assets/meilisearch-cqrs.png'
@@ -10,16 +10,17 @@ No desenvolvimento de software, é extremamente comum iniciarmos sistemas utiliz
 Quando surge a necessidade de criar uma barra de pesquisa, a reação instintiva da maioria dos desenvolvedores é recorrer à cláusula SQL:
 
 ```sql
-SELECT * FROM products WHERE name LIKE '%termo%';
+SELECT * FROM products
+WHERE name LIKE '%termo%';
 ```
 
 No ambiente de desenvolvimento — ou com poucos milhares de registros — essa abordagem funciona de forma aceitável.
 
-No entanto, à medida que o volume de dados cresce para **centenas de milhares de linhas** (no nosso caso prático aqui, mais de 1 milhão de registros) e o tráfego de usuários simultâneos aumenta, essa simples linha de código se transforma em uma das maiores armadilhas de performance de uma infraestrutura.
+No entanto, à medida que o volume de dados cresce para **centenas de milhares de linhas** e o tráfego de usuários simultâneos aumenta, essa simples linha de código se transforma em uma das maiores armadilhas de performance de uma infraestrutura.
 
 ---
 
-#### A anatomia do problema: por que o banco relacional “chora”?
+#### A Anatomia do Problema: Por Que o Banco Relacional “Chora”?
 
 Para entender o gargalo, precisamos olhar para como os bancos relacionais organizam seus índices.
 
