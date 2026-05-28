@@ -1,5 +1,5 @@
 ---
-title: 'Aprenda na prática a realizar buscas textuais instantâneas e com tolerância a erros com CQRS e Meilisearch'
+title: 'Realize buscas textuais instantâneas com tolerância a erros de digitação utilizando CQRS e Meilisearch'
 description: 'O Fim do LIKE: Como Escalar a Busca de Aplicações com CQRS e Meilisearch'
 pubDate: 'May 24 2026'
 heroImage: '../../assets/meilisearch-cqrs.png'
@@ -19,7 +19,7 @@ No entanto, à medida que o volume de dados cresce para **centenas de milhares d
 
 ---
 
-#### A anatomia do problema: por que o banco relacional “chora”?
+#### Por que o banco relacional “chora”?
 
 Para entender o gargalo, precisamos olhar para como os bancos relacionais organizam seus índices.
 
