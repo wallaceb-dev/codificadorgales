@@ -7,7 +7,7 @@ heroImage: '../../assets/meilisearch-cqrs.png'
 
 No desenvolvimento de software, é extremamente comum iniciarmos sistemas utilizando bancos de dados relacionais tradicionais, como **MySQL** ou **PostgreSQL**, para gerenciar todas as operações da aplicação.
 
-Quando surge a necessidade de criar uma barra de pesquisa, a reação instintiva da maioria dos desenvolvedores é recorrer à cláusula SQL:
+Quando surge a necessidade de criar uma barra de pesquisa, a reação instintiva da maioria dos desenvolvedores, acreidto eu, é recorrer à cláusula SQL:
 
 ```sql
 SELECT * FROM products WHERE name LIKE '%termo%';
@@ -15,11 +15,11 @@ SELECT * FROM products WHERE name LIKE '%termo%';
 
 No ambiente de desenvolvimento — ou com poucos milhares de registros — essa abordagem funciona de forma aceitável.
 
-No entanto, à medida que o volume de dados cresce para **centenas de milhares de linhas** (no nosso caso prático aqui, mais de 1 milhão de registros) e o tráfego de usuários simultâneos aumenta, essa simples linha de código se transforma em uma das maiores armadilhas de performance de uma infraestrutura.
+No entanto, à medida que o volume de dados cresce para **centenas de milhares de linhas** e o tráfego de usuários simultâneos aumenta, essa simples linha de código se transforma em uma das maiores armadilhas de performance de uma infraestrutura.
 
 ---
 
-#### Por que o banco relacional “chora”?
+### 1. Por que o banco relacional “chora”?
 
 Para entender o gargalo, precisamos olhar para como os bancos relacionais organizam seus índices.
 
@@ -45,11 +45,13 @@ ORDER BY created_at
 WHERE price BETWEEN 100 AND 500
 ```
 
+Porém... 😰
+
 ---
 
-##### O Problema com `%termo%`
+#### 1.1 O Problema com `%termo%`
 
-Quando realizamos uma busca com caractere coringa no início:
+Quando realizamos uma busca com caractere coringa _("wildcards")_ no início:
 
 ```sql
 WHERE name LIKE '%matrix%'
@@ -59,33 +61,75 @@ quebramos completamente a lógica de navegação da Árvore B+.
 
 O banco não consegue prever quais caracteres iniciam o texto, então ele se torna incapaz de navegar pelo índice.
 
-A única alternativa restante é realizar um:
+Mas, como assim? 🤔
 
-##### **Full Table Scan**
+##### a) Exemplo prático de Árvore B+ no mundo real
+
+Bom, vamos fazer um paralelo com o mundo real. 
+
+Imagine uma biblioteca gigantesca 📚, os livros ficam organizados alfabeticamente pelo título nas prateleiras nos corredores.
+
+Existe uma espécie de “mapa” dizendo:
+
+- livros que começam com A → corredor 1
+- livros que começam com B → corredor 2
+- ...
+- livros que começam com M → corredor 13
+
+e assim por diante.
+
+Essa organização é o equivalente da Árvore B+.
+
+Agora veja a diferença:
+
+```sql
+WHERE name LIKE 'matrix%'
+```
+
+Aqui o banco sabe que o texto começa com "matrix".
+
+É como pedir:
+
+“Quero livros cujo título começa com Matrix.”
+
+O bibliotecário consegue:
+
+- Ir direto para a seção M
+- Encontrar o primeiro “Matrix”
+- Ler sequencialmente dali em diante
+
+Mas ao usar `%matrix%` a única alternativa restante é realizar um:
+
+##### b) **Full Table Scan**
 
 Ou seja, o banco precisa:
 
-1. Ler cada registro do disco
+1. Ler cada registro da tabela
 2. Carregar para memória
 3. Verificar manualmente se contém o termo pesquisado
 
+Isso acarreta em:
+
+- Muitas leituras de disco
+- Mais uso de memória
+- Mais CPU
+- Mais tempo de resposta
+
 ---
 
-#### Complexidade Algorítmica
+#### 2. Complexidade Algorítmica
+
+Direto ao ponto, $$O(N)$$ representa um crescimento linear, onde o trabalho aumenta proporcionalmente à quantidade de dados, como em uma busca que precisa verificar item por item até encontrar o resultado; já $$O(log N)$$ representa um crescimento logarítmico, onde o algoritmo reduz drasticamente o espaço de busca a cada etapa, como acontece em uma busca binária ou em índices baseados em Árvore B+, permitindo encontrar dados em poucas operações mesmo com milhões de registros. Se quiser se aprofundar nisso, pesquiso por **Big O Notation**.
 
 Com índices normais:
 
-$$
-O(\log N)
-$$
+$$O(\log N)$$
 
 ou até próximo de constante.
 
 Com `%termo%`:
 
-$$
-O(N)
-$$
+$$O(N)$$
 
 Isso significa que o custo cresce linearmente com a quantidade de registros.
 
@@ -104,7 +148,7 @@ o servidor sofrerá:
 
 ---
 
-#### Outro Problema: Busca Rígida
+#### 3. Outro problema: Busca rígida
 
 Bancos relacionais exigem correspondência literal.
 
@@ -130,7 +174,7 @@ Isso gera frustração imediata.
 
 ---
 
-#### A Solução Arquitetural: CQRS
+#### 4. A Solução arquitetural: CQRS
 
 **CQRS** significa:
 
@@ -404,29 +448,3 @@ A arquitetura se torna:
 - **escalável**
 
 Capaz de suportar **milhões de buscas** sem comprometer a saúde do banco transacional.
-
----
-
-#### Conclusão
-
-Se sua aplicação possui:
-
-- catálogo grande
-- busca textual intensa
-- muitos usuários simultâneos
-
-então usar:
-
-```sql
-LIKE '%termo%'
-```
-
-não é apenas uma má prática.
-
-É uma bomba-relógio arquitetural.
-
-A combinação:
-
-**MySQL + CQRS + Meilisearch**
-
-transforma a busca em uma operação especializada, rápida e preparada para escala real.
