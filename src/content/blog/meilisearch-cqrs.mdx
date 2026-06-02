@@ -5,6 +5,9 @@ pubDate: 'May 24 2026'
 heroImage: '../../assets/meilisearch-cqrs.png'
 ---
 
+import { Image } from 'astro:assets';
+import MeilisearchCQRSArchitecture from '../../assets/meilisearch-cqrs-architecture.png';
+
 No desenvolvimento de software, é extremamente comum iniciarmos sistemas utilizando bancos de dados relacionais tradicionais, como **MySQL** ou **PostgreSQL**, para gerenciar todas as operações da aplicação.
 
 Quando surge a necessidade de criar uma barra de pesquisa, a reação instintiva da maioria dos desenvolvedores, acreidto eu, é recorrer à cláusula SQL:
@@ -110,10 +113,10 @@ Ou seja, o banco precisa:
 
 Isso acarreta em:
 
-- Muitas leituras de disco
-- Mais uso de memória
-- Mais CPU
-- Mais tempo de resposta
+- muitas leituras de disco
+- mais uso de memória
+- mais CPU
+- mais tempo de resposta
 
 ---
 
@@ -187,28 +190,15 @@ A ideia é separar:
 
 ---
 
-##### Arquitetura
+##### 4.1 Arquitetura
 
-```text
-                  ┌──────────────┐
-                  │  Aplicação   │
-                  └──────┬───────┘
-                         │
-         ┌───────────────┴───────────────┐
-         ▼                               ▼
-     (Escrita)                        (Leitura)
-   ┌───────────┐                   ┌──────────────┐
-   │   MySQL   │                   │ Meilisearch  │
-   └───────────┘                   └──────────────┘
-```
+<Image src={MeilisearchCQRSArchitecture} alt="Arquitetura" />
 
 ---
 
-#### Lado de Escrita (Commands)
+#### 5. Lado de Escrita (Commands)
 
-O **MySQL** continua sendo o banco transacional principal.
-
-Responsável por:
+O **MySQL** continua sendo o banco transacional principal sendo responsável por:
 
 - integridade referencial
 - transações ACID
@@ -224,7 +214,7 @@ UPDATE orders SET status = 'paid'
 
 ---
 
-#### Lado de Leitura (Queries)
+#### 6. Lado de Leitura (Queries)
 
 As buscas textuais pesadas são delegadas a motores especializados como:
 
