@@ -1,0 +1,517 @@
+---
+title: 'Arquitetura Orientada a Eventos: Quando usar eventos — e quando evitá-los'
+description: 'Nem tudo deveria ser um evento. Neste artigo exploramos os trade-offs reais da arquitetura orientada a eventos, discutindo side effects, consistência, listeners, orquestração vs coreografia e os problemas de acoplamento implícito que surgem em sistemas modernos'
+pubDate: 'Jun 04 2026'
+heroImage: '../../assets/erros-trabalhando-com-eventos.png'
+---
+
+Arquitetura orientada a eventos virou praticamente padrão em sistemas modernos.
+
+Kafka, RabbitMQ, filas, listeners, webhooks, microsserviços — tudo parece empurrar times para um modelo cada vez mais distribuído e assíncrono.
+
+Mas existe um problema:
+
+Muitos sistemas começam a usar eventos sem entender exatamente o que um evento representa.
+
+O resultado normalmente é o mesmo:
+
+* lógica espalhada
+* fluxo invisível
+* dificuldade absurda de debugging
+* dependências ocultas
+* comportamento imprevisível
+
+Curiosamente, o problema quase nunca está nos eventos em si.
+
+Está em como eles são modelados.
+
+Neste artigo vamos explorar três erros extremamente comuns em arquiteturas orientadas a eventos, entender por que eles acontecem e discutir abordagens mais saudáveis para construir sistemas sustentáveis no longo prazo.
+
+---
+
+#### 1. O Que É Um Evento?
+
+Antes de qualquer coisa, precisamos alinhar o conceito.
+
+##### Definição
+
+Um evento representa:
+
+> um fato que já aconteceu no sistema.
+
+Ele descreve uma mudança relevante de estado.
+
+Exemplos:
+
+```text
+UserRegistered
+PaymentApproved
+SubscriptionCanceled
+InvoiceGenerated
+```
+
+O ponto mais importante aqui é que eventos não são comandos. Eventos descrevem fatos passados.
+
+---
+
+#### 2. Eventos não são comandos disfarçados
+
+Esse é um dos erros mais comuns.
+
+Muita gente escreve algo assim:
+
+```php
+event(new SendWelcomeEmail($user));
+```
+
+Embora tecnicamente isso possa funcionar, semanticamente isso não é um evento.
+
+Isso é um comando.
+
+A intenção real da mensagem é:
+
+```text
+"Envie um email"
+```
+
+e não:
+
+```text
+"Um fato aconteceu"
+```
+
+Essa diferença parece pequena, mas arquiteturalmente ela é enorme.
+
+---
+
+#### 3. Eventos saudáveis descrevem fatos
+
+Um modelo mais saudável seria:
+
+```php
+event(new UserRegistered($user));
+```
+
+Agora o sistema está comunicando:
+
+```text
+"Um usuário foi registrado"
+```
+
+E diferentes partes do sistema — ou microserviços — podem reagir a isso:
+
+* enviar email
+* atualizar analytics
+* criar auditoria
+* emitir webhook
+
+Os listeners passam a ser consequências do fato.
+
+Não a razão da existência dele.
+
+---
+
+#### 4. O Problema do Acoplamento Invisível
+
+Aqui começa um dos maiores perigos da arquitetura orientada a eventos.
+
+Imagine o seguinte fluxo:
+
+```php
+event(new UserRegistered($user));
+```
+
+E agora imagine que esse evento dispara:
+
+* criação de perfil
+* criação de billing
+* criação de tenant
+* configuração de permissões
+* criação de trial
+* sincronização externa
+
+À primeira vista o código parece limpo.
+
+Mas existe um problema sério:
+
+O fluxo real do sistema ficou invisível.
+
+Ao olhar para o código principal, você não consegue mais saber:
+
+* o que realmente acontece
+* quantas coisas dependem daquele evento
+* quais falhas podem ocorrer
+* quais efeitos colaterais existem
+
+Você perde previsibilidade.
+
+---
+
+#### 5. O Grande Problema: fluxo principal oculto
+
+Esse é o ponto mais importante do artigo inteiro.
+
+Existe uma diferença enorme entre:
+
+##### consequências desacopláveis
+
+e
+
+##### fluxo principal obrigatório
+
+---
+
+#### 6. Quando Eventos Funcionam Muito Bem
+
+Eventos brilham quando representam consequências reativas.
+
+Por exemplo:
+
+```text
+PaymentApproved
+```
+
+Após um pagamento aprovado, faz sentido reagir com:
+
+* envio de email
+* atualização de analytics
+* webhook
+* antifraude
+* emissão fiscal
+* atualização de ERP
+
+Essas operações são naturalmente reativas.
+
+O fato principal já aconteceu.
+
+O restante são consequências.
+
+---
+
+#### 7. Quando eventos começam a virar problema
+
+Agora imagine um fluxo de cadastro de usuário.
+
+Se o sistema depende obrigatoriamente de:
+
+* perfil criado
+* permissões criadas
+* tenant criado
+* trial criado
+
+para funcionar corretamente…
+
+talvez isso não devesse estar escondido atrás de listeners.
+
+Porque essas operações fazem parte do núcleo do caso de uso.
+
+---
+
+#### 8. Um Fluxo Mais Explícito
+
+Nesses casos, normalmente é mais saudável usar orquestração explícita:
+
+```php
+class RegisterUserService
+{
+    public function execute()
+    {
+        $user = $this->createUser();
+
+        $this->createProfile($user);
+
+        $this->createTrial($user);
+
+        $this->createPermissions($user);
+    }
+}
+```
+
+Agora o fluxo está:
+
+* explícito
+* previsível
+* rastreável
+* transacional
+
+---
+
+#### 9. Uma pergunta extremamente útil
+
+Existe uma heurística excelente para avaliar eventos:
+
+> "Se esse listener falhar, o sistema continua consistente?"
+
+Essa pergunta separa muito bem:
+
+* side effects
+  de
+* lógica obrigatória de negócio
+
+---
+
+#### Exemplo Saudável
+
+```text
+UserRegistered -> SendWelcomeEmail
+```
+
+Se o email falhar:
+
+* o usuário continua válido
+* o sistema continua consistente
+* o processamento pode ser refeito depois
+
+Excelente candidato para arquitetura orientada a eventos.
+
+---
+
+#### Exemplo Questionável
+
+```text
+UserRegistered -> CreateRequiredUserProfile
+```
+
+Se isso falhar:
+
+* o usuário fica inconsistente
+* partes do sistema quebram
+* a operação principal ficou incompleta
+
+Talvez isso não devesse ser um listener assíncrono.
+
+---
+
+#### 10. O segundo grande erro: eventos específicos demais
+
+Outro problema extremamente comum:
+
+```text
+OrderCreatedWithDiscount30
+```
+
+ou pior:
+
+```text
+OrderCreatedWithDiscount30AndPix
+```
+
+Esse tipo de modelagem normalmente indica que regras de negócio temporárias estão vazando para o nome do evento.
+
+Isso gera:
+
+* explosão de eventos
+* acoplamento semântico
+* dificuldade de evolução
+* versionamento problemático
+
+---
+
+#### 11. Eventos devem representar fatos relevantes
+
+Uma modelagem mais saudável seria:
+
+```text
+OrderCreated
+```
+
+E os detalhes ficam nos dados:
+
+```php
+class OrderCreated
+{
+    public function __construct(
+        public Order $order,
+        public float $discount,
+        public string $paymentMethod,
+    ) {}
+}
+```
+
+Agora o evento continua estável mesmo que as regras evoluam.
+
+---
+
+#### 12. O terceiro grande erro: listeners virando mini sistemas
+
+Isso acontece o tempo todo.
+
+O listener começa simples:
+
+```php
+class SendWelcomeEmail
+{
+    public function handle(UserRegistered $event)
+    {
+        //
+    }
+}
+```
+
+Mas o tempo passa.
+
+E começam a surgir:
+
+* condicionais
+* integrações externas
+* múltiplos serviços
+* regras de negócio
+* retries
+* transações
+* filas internas
+
+De repente o listener virou um sistema paralelo.
+
+---
+
+#### 13. O problema da fragmentação de negócio
+
+Quando muita lógica fica espalhada em listeners:
+
+* o fluxo fica difícil de seguir
+* debugging vira um pesadelo
+* testes ficam complexos
+* onboarding piora
+* observabilidade degrada
+
+Você cria o que muitos chamam de:
+
+##### business logic fragmentation
+
+A lógica deixa de existir em um fluxo claro e passa a estar pulverizada pelo sistema inteiro.
+
+---
+
+#### 14. Eventos trazem desacoplamento — mas com um custo
+
+Esse é um ponto importante que muita gente ignora.
+
+Arquitetura orientada a eventos troca:
+
+##### acoplamento explícito
+
+por
+
+##### acoplamento implícito
+
+Você ganha:
+
+* escalabilidade
+* independência
+* processamento assíncrono
+* flexibilidade
+
+Mas perde:
+
+* rastreabilidade
+* previsibilidade
+* simplicidade operacional
+
+Por isso eventos não são automaticamente uma melhoria.
+
+Eles são uma troca arquitetural.
+
+---
+
+#### 15. Orquestração vs Coreografia
+
+Esse debate normalmente leva a outro conceito importante.
+
+##### Orquestração
+
+Fluxo explícito:
+
+```text
+A chama B
+B chama C
+C chama D
+```
+
+Você controla a sequência.
+
+---
+
+##### Coreografia
+
+Fluxo baseado em eventos:
+
+```text
+Evento acontece
+cada sistema reage sozinho
+```
+
+Mais desacoplado.
+
+Mais distribuído.
+
+Mais difícil de visualizar.
+
+---
+
+#### 16. Regra prática muito boa
+
+Outra heurística extremamente útil:
+
+> "Se o fluxo precisa acontecer obrigatoriamente para a operação funcionar, talvez não devesse ser evento."
+
+Exemplos excelentes para eventos:
+
+* analytics
+* notificações
+* emails
+* webhooks
+* auditoria
+* integrações externas
+
+Exemplos mais questionáveis:
+
+* criação obrigatória de entidades core
+* coordenação crítica de transações
+* lógica principal do caso de uso
+
+---
+
+#### 17. Eventos não são ruins
+
+Isso é importante.
+
+O objetivo não é demonizar arquitetura orientada a eventos.
+
+Eventos são extremamente poderosos para:
+
+* microsserviços
+* integração entre bounded contexts
+* event sourcing
+* auditoria
+* filas
+* comunicação assíncrona
+* sistemas distribuídos
+
+O problema é quando eventos viram:
+
+##### mecanismo oculto de workflow crítico\
+
+---- 
+
+#### Conclusão
+
+Arquitetura orientada a eventos pode tornar sistemas extremamente elegantes.
+
+Mas também pode transformá-los em um labirinto impossível de entender.
+
+O segredo não está em usar mais eventos.
+
+Está em modelar corretamente:
+
+- o que é um fato
+- o que é um comando
+- o que é side effect
+- o que é fluxo principal
+- o que precisa de consistência imediata
+- o que pode ser eventual
+
+No fim, arquitetura madura quase sempre significa:
+
+> deixar explícito aquilo que é essencial.
+
+E desacoplar apenas aquilo que realmente pode ser desacoplado.
